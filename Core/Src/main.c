@@ -19,6 +19,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -40,13 +41,57 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
 
+/* Definitions for readSensor */
+osThreadId_t readSensorHandle;
+const osThreadAttr_t readSensor_attributes = {
+  .name = "readSensor",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
 /* USER CODE BEGIN PV */
+
+// PV == Private vars ??
+/*
+ * In documentation, the 7-bit slave address was 0b1000000,
+ * this means that the 8-bit address is 0b10000000 or 0x80.
+ */
+const uint8_t SLAVE_ADDRESS = 0x80;
+/*
+ * We need an array of commands, HAL_I2C_Master_Transmit
+ * takes a pointer to a byte array to send data.
+ * 0xFE -> Reset
+ * 0xE3 -> Get Temp (Master Hold)
+ * 0xE5 -> Get Humid (Master Hold)
+ */
+uint8_t uint8_commands[3]= { 0xFE, 0xE3, 0xE5 };
+/*
+ * We need two byte arrays to store the incoming
+ * data from the SI7021, one for temperature, and
+ * one for humidity.
+ */
+uint8_t uint8_tempIncomingBytes[3];
+uint8_t uint8_humidIncomingBytes[3];
+/*
+ * Now we need to convert these values to float
+ * so we can calculate to actual temperature.
+ */
+float float_temp, float_humid;
+/*
+ * Some floats to store the final value
+ * of the temperature and humidity.
+ */
+float float_tempFinal, float_humidFinal;
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_I2C1_Init(void);
+void ReadSensorTask(void *argument);
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -83,10 +128,52 @@ int main(void)
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+
+  // Send 0xFE to 0x80 (Reset)
+  HAL_I2C_Master_Transmit(&hi2c1, SLAVE_ADDRESS, &uint8_commands[0], 1, 100);
+  // Wait for transmission
+  HAL_Delay(40);
 
   /* USER CODE END 2 */
 
+  /* Init scheduler */
+  osKernelInitialize();
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* creation of readSensor */
+  readSensorHandle = osThreadNew(ReadSensorTask, NULL, &readSensor_attributes);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* USER CODE BEGIN RTOS_EVENTS */
+  /* add events, ... */
+  /* USER CODE END RTOS_EVENTS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -106,6 +193,7 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -130,11 +218,138 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_I2C1;
+  PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_HSI;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.Timing = 0x2000090E;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPIO_Init(void)
+{
+
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
 }
 
 /* USER CODE BEGIN 4 */
 
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_ReadSensorTask */
+/**
+  * @brief  Function implementing the readSensor thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_ReadSensorTask */
+void ReadSensorTask(void *argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+	// Toggle LED
+	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+
+	// Send 0xE3 to 0x80 (Measure Temperature CMD)
+	HAL_I2C_Master_Transmit(&hi2c1, SLAVE_ADDRESS, &uint8_commands[1], 1, 100);
+	// Save the 3 next incoming bytes from 0x80
+	HAL_I2C_Master_Receive(&hi2c1, SLAVE_ADDRESS, uint8_tempIncomingBytes, 3, 1000);
+	// Combine byte[0] and byte[1] to make a float
+	float_temp = (float)((uint8_tempIncomingBytes[0]<<8) | uint8_tempIncomingBytes[1]);
+	// Calculation as shown in documentation
+	float_tempFinal = (-46.85 + (175.72*(float_temp/65536)));
+	// Delay
+	HAL_Delay(50);
+
+	// Send 0xE5 to 0x80 (Measure Humidity CMD)
+	HAL_I2C_Master_Transmit(&hi2c1, SLAVE_ADDRESS, &uint8_commands[2] ,1, 100);
+	// Save the 3 next incoming bytes from 0x80
+	HAL_I2C_Master_Receive(&hi2c1, SLAVE_ADDRESS, uint8_humidIncomingBytes, 3, 1000);
+	// Combine byte[0] and byte[1] to make a float
+	float_humid = (float)((uint8_humidIncomingBytes[0]<<8) | uint8_humidIncomingBytes[1]);
+	// Calculation as shown in documentation
+	float_humidFinal = (-6+(125*(float_humid/65536)));
+	// Delay
+	HAL_Delay(2000);
+  }
+  /* USER CODE END 5 */
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM6 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM6) {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
+
+  /* USER CODE END Callback 1 */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.
