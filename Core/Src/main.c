@@ -43,14 +43,46 @@
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
-/* Definitions for defaultTask */
-osThreadId_t defaultTaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
+/* Definitions for readSensor */
+osThreadId_t readSensorHandle;
+const osThreadAttr_t readSensor_attributes = {
+  .name = "readSensor",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
+
+// PV == Private vars ??
+/*
+ * In documentation, the 7-bit slave address was 0b1000000,
+ * this means that the 8-bit address is 0b10000000 or 0x80.
+ */
+const uint8_t SLAVE_ADDRESS = 0x80;
+/*
+ * We need an array of commands, HAL_I2C_Master_Transmit
+ * takes a pointer to a byte array to send data.
+ * 0xFE -> Reset
+ * 0xE3 -> Get Temp (Master Hold)
+ * 0xE5 -> Get Humid (Master Hold)
+ */
+uint8_t uint8_commands[3]= { 0xFE, 0xE3, 0xE5 };
+/*
+ * We need two byte arrays to store the incoming
+ * data from the SI7021, one for temperature, and
+ * one for humidity.
+ */
+uint8_t uint8_tempIncomingBytes[3];
+uint8_t uint8_humidIncomingBytes[3];
+/*
+ * Now we need to convert these values to float
+ * so we can calculate to actual temperature.
+ */
+float float_temp, float_humid;
+/*
+ * Some floats to store the final value
+ * of the temperature and humidity.
+ */
+float float_tempFinal, float_humidFinal;
 
 /* USER CODE END PV */
 
@@ -58,7 +90,7 @@ const osThreadAttr_t defaultTask_attributes = {
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
-void StartDefaultTask(void *argument);
+void ReadSensorTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -100,6 +132,11 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
+  // Send 0xFE to 0x80 (Reset)
+  HAL_I2C_Master_Transmit(&hi2c1, SLAVE_ADDRESS, &uint8_commands[0], 1, 100);
+  // Wait for transmission
+  HAL_Delay(40);
+
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -122,8 +159,8 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  /* creation of readSensor */
+  readSensorHandle = osThreadNew(ReadSensorTask, NULL, &readSensor_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -252,20 +289,43 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE BEGIN Header_ReadSensorTask */
 /**
-  * @brief  Function implementing the defaultTask thread.
+  * @brief  Function implementing the readSensor thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
+/* USER CODE END Header_ReadSensorTask */
+void ReadSensorTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+	// Toggle LED
+	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+
+	// Send 0xE3 to 0x80 (Measure Temperature CMD)
+	HAL_I2C_Master_Transmit(&hi2c1, SLAVE_ADDRESS, &uint8_commands[1], 1, 100);
+	// Save the 3 next incoming bytes from 0x80
+	HAL_I2C_Master_Receive(&hi2c1, SLAVE_ADDRESS, uint8_tempIncomingBytes, 3, 1000);
+	// Combine byte[0] and byte[1] to make a float
+	float_temp = (float)((uint8_tempIncomingBytes[0]<<8) | uint8_tempIncomingBytes[1]);
+	// Calculation as shown in documentation
+	float_tempFinal = (-46.85 + (175.72*(float_temp/65536)));
+	// Delay
+	HAL_Delay(50);
+
+	// Send 0xE5 to 0x80 (Measure Humidity CMD)
+	HAL_I2C_Master_Transmit(&hi2c1, SLAVE_ADDRESS, &uint8_commands[2] ,1, 100);
+	// Save the 3 next incoming bytes from 0x80
+	HAL_I2C_Master_Receive(&hi2c1, SLAVE_ADDRESS, uint8_humidIncomingBytes, 3, 1000);
+	// Combine byte[0] and byte[1] to make a float
+	float_humid = (float)((uint8_humidIncomingBytes[0]<<8) | uint8_humidIncomingBytes[1]);
+	// Calculation as shown in documentation
+	float_humidFinal = (-6+(125*(float_humid/65536)));
+	// Delay
+	HAL_Delay(2000);
   }
   /* USER CODE END 5 */
 }
