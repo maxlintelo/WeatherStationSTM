@@ -23,6 +23,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "sensor.h"
 
 /* USER CODE END Includes */
 
@@ -43,6 +44,8 @@
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
+UART_HandleTypeDef huart2;
+
 /* Definitions for readSensor */
 osThreadId_t readSensorHandle;
 const osThreadAttr_t readSensor_attributes = {
@@ -52,37 +55,8 @@ const osThreadAttr_t readSensor_attributes = {
 };
 /* USER CODE BEGIN PV */
 
-// PV == Private vars ??
-/*
- * In documentation, the 7-bit slave address was 0b1000000,
- * this means that the 8-bit address is 0b10000000 or 0x80.
- */
-const uint8_t SLAVE_ADDRESS = 0x80;
-/*
- * We need an array of commands, HAL_I2C_Master_Transmit
- * takes a pointer to a byte array to send data.
- * 0xFE -> Reset
- * 0xE3 -> Get Temp (Master Hold)
- * 0xE5 -> Get Humid (Master Hold)
- */
-uint8_t uint8_commands[3]= { 0xFE, 0xE3, 0xE5 };
-/*
- * We need two byte arrays to store the incoming
- * data from the SI7021, one for temperature, and
- * one for humidity.
- */
-uint8_t uint8_tempIncomingBytes[3];
-uint8_t uint8_humidIncomingBytes[3];
-/*
- * Now we need to convert these values to float
- * so we can calculate to actual temperature.
- */
-float float_temp, float_humid;
-/*
- * Some floats to store the final value
- * of the temperature and humidity.
- */
-float float_tempFinal, float_humidFinal;
+float float_finalTemp = 0.0;
+float float_finalHumid = 0.0;
 
 /* USER CODE END PV */
 
@@ -90,6 +64,7 @@ float float_tempFinal, float_humidFinal;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_USART2_UART_Init(void);
 void ReadSensorTask(void *argument);
 
 /* USER CODE BEGIN PFP */
@@ -130,12 +105,10 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_I2C1_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  // Send 0xFE to 0x80 (Reset)
-  HAL_I2C_Master_Transmit(&hi2c1, SLAVE_ADDRESS, &uint8_commands[0], 1, 100);
-  // Wait for transmission
-  HAL_Delay(40);
+  initSensor(&hi2c1);
 
   /* USER CODE END 2 */
 
@@ -273,6 +246,41 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -281,6 +289,7 @@ static void MX_GPIO_Init(void)
 {
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
 }
@@ -304,28 +313,12 @@ void ReadSensorTask(void *argument)
   {
 	// Toggle LED
 	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+	//updateSensor(&float_finalTemp, &float_finalHumid, &hi2c1);
 
-	// Send 0xE3 to 0x80 (Measure Temperature CMD)
-	HAL_I2C_Master_Transmit(&hi2c1, SLAVE_ADDRESS, &uint8_commands[1], 1, 100);
-	// Save the 3 next incoming bytes from 0x80
-	HAL_I2C_Master_Receive(&hi2c1, SLAVE_ADDRESS, uint8_tempIncomingBytes, 3, 1000);
-	// Combine byte[0] and byte[1] to make a float
-	float_temp = (float)((uint8_tempIncomingBytes[0]<<8) | uint8_tempIncomingBytes[1]);
-	// Calculation as shown in documentation
-	float_tempFinal = (-46.85 + (175.72*(float_temp/65536)));
-	// Delay
-	HAL_Delay(50);
+	char *msg = "Hello Nucleo Fun!\n\r";
 
-	// Send 0xE5 to 0x80 (Measure Humidity CMD)
-	HAL_I2C_Master_Transmit(&hi2c1, SLAVE_ADDRESS, &uint8_commands[2] ,1, 100);
-	// Save the 3 next incoming bytes from 0x80
-	HAL_I2C_Master_Receive(&hi2c1, SLAVE_ADDRESS, uint8_humidIncomingBytes, 3, 1000);
-	// Combine byte[0] and byte[1] to make a float
-	float_humid = (float)((uint8_humidIncomingBytes[0]<<8) | uint8_humidIncomingBytes[1]);
-	// Calculation as shown in documentation
-	float_humidFinal = (-6+(125*(float_humid/65536)));
-	// Delay
-	HAL_Delay(2000);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg, 20, 0xFFFF);
+	HAL_Delay(1000);
   }
   /* USER CODE END 5 */
 }
