@@ -53,6 +53,13 @@ const osThreadAttr_t readSensor_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+/* Definitions for blinkLed */
+osThreadId_t blinkLedHandle;
+const osThreadAttr_t blinkLed_attributes = {
+  .name = "blinkLed",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* USER CODE BEGIN PV */
 
 float float_finalTemp = 0.0;
@@ -66,6 +73,7 @@ static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_USART2_UART_Init(void);
 void ReadSensorTask(void *argument);
+void StartBlinkLed(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -134,6 +142,9 @@ int main(void)
   /* Create the thread(s) */
   /* creation of readSensor */
   readSensorHandle = osThreadNew(ReadSensorTask, NULL, &readSensor_attributes);
+
+  /* creation of blinkLed */
+  blinkLedHandle = osThreadNew(StartBlinkLed, NULL, &blinkLed_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -287,10 +298,21 @@ static void MX_USART2_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PA5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_5;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 }
 
@@ -308,19 +330,43 @@ static void MX_GPIO_Init(void)
 void ReadSensorTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
+  const TickType_t xDelay = 2500 / portTICK_PERIOD_MS;
+  /* Infinite loop */
+  for(;;)
+  {
+	// Update values float_finalTemp and float_finalHumid
+	updateSensor(&float_finalTemp, &float_finalHumid, &hi2c1);
+	// Non-blocking delay
+	osDelay(xDelay);
+
+	// TODO Fix UART
+	// char *msg = "Hello Nucleo Fun!\n\r";
+	// HAL_UART_Transmit(&huart2, (uint8_t*)msg, 20, 0xFFFF);
+	// HAL_Delay(1000);
+  }
+  /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartBlinkLed */
+/**
+* @brief Function implementing the blinkLed thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartBlinkLed */
+void StartBlinkLed(void *argument)
+{
+  /* USER CODE BEGIN StartBlinkLed */
+  const TickType_t xDelay = 500 / portTICK_PERIOD_MS;
   /* Infinite loop */
   for(;;)
   {
 	// Toggle LED
 	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-	//updateSensor(&float_finalTemp, &float_finalHumid, &hi2c1);
-
-	char *msg = "Hello Nucleo Fun!\n\r";
-
-	HAL_UART_Transmit(&huart2, (uint8_t*)msg, 20, 0xFFFF);
-	HAL_Delay(1000);
+	// Non-blocking delay
+	osDelay(xDelay);
   }
-  /* USER CODE END 5 */
+  /* USER CODE END StartBlinkLed */
 }
 
 /**
