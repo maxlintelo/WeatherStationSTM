@@ -24,6 +24,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "sensor.h"
+#include "string.h"
 
 /* USER CODE END Includes */
 
@@ -53,10 +54,10 @@ const osThreadAttr_t readSensor_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for blinkLed */
-osThreadId_t blinkLedHandle;
-const osThreadAttr_t blinkLed_attributes = {
-  .name = "blinkLed",
+/* Definitions for sendData */
+osThreadId_t sendDataHandle;
+const osThreadAttr_t sendData_attributes = {
+  .name = "sendData",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
@@ -73,7 +74,7 @@ static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_USART2_UART_Init(void);
 void ReadSensorTask(void *argument);
-void StartBlinkLed(void *argument);
+void StartSendData(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -143,8 +144,8 @@ int main(void)
   /* creation of readSensor */
   readSensorHandle = osThreadNew(ReadSensorTask, NULL, &readSensor_attributes);
 
-  /* creation of blinkLed */
-  blinkLedHandle = osThreadNew(StartBlinkLed, NULL, &blinkLed_attributes);
+  /* creation of sendData */
+  sendDataHandle = osThreadNew(StartSendData, NULL, &sendData_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -347,26 +348,47 @@ void ReadSensorTask(void *argument)
   /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_StartBlinkLed */
+/* USER CODE BEGIN Header_StartSendData */
 /**
-* @brief Function implementing the blinkLed thread.
+* @brief Function implementing the sendData thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartBlinkLed */
-void StartBlinkLed(void *argument)
+/* USER CODE END Header_StartSendData */
+void StartSendData(void *argument)
 {
-  /* USER CODE BEGIN StartBlinkLed */
-  const TickType_t xDelay = 500 / portTICK_PERIOD_MS;
+  /* USER CODE BEGIN StartSendData */
+	const TickType_t xDelay = 10000 / portTICK_PERIOD_MS;
+	const TickType_t xConnectDelay = 7500 / portTICK_PERIOD_MS;
   /* Infinite loop */
   for(;;)
   {
-	// Toggle LED
-	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-	// Non-blocking delay
-	osDelay(xDelay);
+	  char line1[] = "AT+CWMODE=1\r\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t*) line1, strlen(line1), 10);
+	  osDelay(1000);
+
+	  char line2[] = "AT+CWJAP=\"KPNC12816\",\"VVWbKchF7R3J3wvN\"\r\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t*) line2, strlen(line2), 10);
+	  osDelay(xConnectDelay);
+
+	  char line3[] = "AT+CIPSTART=\"TCP\",\"81.207.176.52\",8081\r\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t*) line3, strlen(line3), 10);
+	  osDelay(1000);
+
+	  char line4[] = "AT+CIPSEND=18\r\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t*) line4, strlen(line4), 10);
+	  osDelay(1000);
+
+	  char line5[] = "GET / HTTP/1.1\r\n\r\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t*) line5, strlen(line5), 10);
+	  osDelay(1000);
+
+	  char line6[] = "AT+CIPCLOSE\r\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t*) line6, strlen(line6), 10);
+	  osDelay(1000);
+    osDelay(xDelay);
   }
-  /* USER CODE END StartBlinkLed */
+  /* USER CODE END StartSendData */
 }
 
 /**
