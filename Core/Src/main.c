@@ -45,7 +45,7 @@
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
-UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart1;
 
 /* Definitions for readSensor */
 osThreadId_t readSensorHandle;
@@ -72,7 +72,7 @@ float float_finalHumid = 0.0;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
-static void MX_USART2_UART_Init(void);
+static void MX_USART1_UART_Init(void);
 void ReadSensorTask(void *argument);
 void StartSendData(void *argument);
 
@@ -114,7 +114,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_I2C1_Init();
-  MX_USART2_UART_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
   initSensor(&hi2c1);
@@ -203,7 +203,8 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_I2C1;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART1|RCC_PERIPHCLK_I2C1;
+  PeriphClkInit.Usart1ClockSelection = RCC_USART1CLKSOURCE_PCLK1;
   PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_HSI;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
@@ -258,37 +259,37 @@ static void MX_I2C1_Init(void)
 }
 
 /**
-  * @brief USART2 Initialization Function
+  * @brief USART1 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_USART2_UART_Init(void)
+static void MX_USART1_UART_Init(void)
 {
 
-  /* USER CODE BEGIN USART2_Init 0 */
+  /* USER CODE BEGIN USART1_Init 0 */
 
-  /* USER CODE END USART2_Init 0 */
+  /* USER CODE END USART1_Init 0 */
 
-  /* USER CODE BEGIN USART2_Init 1 */
+  /* USER CODE BEGIN USART1_Init 1 */
 
-  /* USER CODE END USART2_Init 1 */
-  huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
-  huart2.Init.WordLength = UART_WORDLENGTH_8B;
-  huart2.Init.StopBits = UART_STOPBITS_1;
-  huart2.Init.Parity = UART_PARITY_NONE;
-  huart2.Init.Mode = UART_MODE_TX_RX;
-  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart2) != HAL_OK)
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 115200;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN USART2_Init 2 */
+  /* USER CODE BEGIN USART1_Init 2 */
 
-  /* USER CODE END USART2_Init 2 */
+  /* USER CODE END USART1_Init 2 */
 
 }
 
@@ -359,34 +360,41 @@ void StartSendData(void *argument)
 {
   /* USER CODE BEGIN StartSendData */
 	const TickType_t xDelay = 10000 / portTICK_PERIOD_MS;
-	const TickType_t xConnectDelay = 7500 / portTICK_PERIOD_MS;
+	const TickType_t xConnectDelay = 5000 / portTICK_PERIOD_MS;
   /* Infinite loop */
   for(;;)
   {
-	  char line1[] = "AT+CWMODE=1\r\n";
-	  HAL_UART_Transmit(&huart2, (uint8_t*) line1, strlen(line1), 10);
+	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+
+	  char line1[] = "AT+CWMODE=1\r\n";											//set wifi mode
+	  HAL_UART_Transmit(&huart1, (uint8_t*) line1, strlen(line1), 10);
 	  osDelay(1000);
 
-	  char line2[] = "AT+CWJAP=\"KPNC12816\",\"VVWbKchF7R3J3wvN\"\r\n";
-	  HAL_UART_Transmit(&huart2, (uint8_t*) line2, strlen(line2), 10);
+	  char line2[] = "AT+CWJAP=\"KPNC12816\",\"VVWbKchF7R3J3wvN\"\r\n";			//connect to an AP(router)
+	  HAL_UART_Transmit(&huart1, (uint8_t*) line2, strlen(line2), 10);
 	  osDelay(xConnectDelay);
 
-	  char line3[] = "AT+CIPSTART=\"TCP\",\"81.207.176.52\",8081\r\n";
-	  HAL_UART_Transmit(&huart2, (uint8_t*) line3, strlen(line3), 10);
+	  char line3[] = "AT+CIPSTART=\"TCP\",\"82.170.159.85\",8081\r\n";			//target IP when sending data (hier maak TCP connectie)
+	  HAL_UART_Transmit(&huart1, (uint8_t*) line3, strlen(line3), 10);
 	  osDelay(1000);
 
-	  char line4[] = "AT+CIPSEND=18\r\n";
-	  HAL_UART_Transmit(&huart2, (uint8_t*) line4, strlen(line4), 10);
+	  char line4[] = "AT+CIPSEND=18\r\n";										//hoeveel data verzenden
+	  HAL_UART_Transmit(&huart1, (uint8_t*) line4, strlen(line4), 10);
 	  osDelay(1000);
 
-	  char line5[] = "GET / HTTP/1.1\r\n\r\n";
-	  HAL_UART_Transmit(&huart2, (uint8_t*) line5, strlen(line5), 10);
+	  char line5[] = "GET / HTTP/1.1\r\n\r\n";									//data daadwerkelijk verzenden
+	  HAL_UART_Transmit(&huart1, (uint8_t*) line5, strlen(line5), 10);
 	  osDelay(1000);
 
-	  char line6[] = "AT+CIPCLOSE\r\n";
-	  HAL_UART_Transmit(&huart2, (uint8_t*) line6, strlen(line6), 10);
+	  char line6[] = "AT+CIPCLOSE\r\n";											//close TCP
+	  HAL_UART_Transmit(&huart1, (uint8_t*) line6, strlen(line6), 10);
 	  osDelay(1000);
+	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
     osDelay(xDelay);
+
+
+
+
   }
   /* USER CODE END StartSendData */
 }
