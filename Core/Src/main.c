@@ -24,7 +24,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "sensor.h"
-#include "string.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 /* USER CODE END Includes */
 
@@ -319,6 +321,15 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void debugPrint(UART_HandleTypeDef *huart, char _out[]){
+  HAL_UART_Transmit(huart, (uint8_t *) _out, strlen(_out), 10);
+}
+
+void debugPrintln(UART_HandleTypeDef *huart, char _out[]){
+  HAL_UART_Transmit(huart, (uint8_t *) _out, strlen(_out), 10);
+  char newline[2] = "\r\n";
+  HAL_UART_Transmit(huart, (uint8_t *) newline, 2, 10);
+}
 
 /* USER CODE END 4 */
 
@@ -350,6 +361,20 @@ void ReadSensorTask(void *argument)
 }
 
 /* USER CODE BEGIN Header_StartSendData */
+
+char* rep(char* input, char find, char replace) {
+	char * output = (char*)malloc(strlen(input));
+
+	for (int i = 0; i < strlen(input); i++)
+	{
+	    if (input[i] == find) output[i] = replace;
+	    else output[i] = input[i];
+	}
+
+	output[strlen(input)] = '\0';
+
+	return output;
+}
 /**
 * @brief Function implementing the sendData thread.
 * @param argument: Not used
@@ -359,43 +384,108 @@ void ReadSensorTask(void *argument)
 void StartSendData(void *argument)
 {
   /* USER CODE BEGIN StartSendData */
-	const TickType_t xDelay = 10000 / portTICK_PERIOD_MS;
-	const TickType_t xConnectDelay = 5000 / portTICK_PERIOD_MS;
+//	const TickType_t xDelay = 10000 / portTICK_PERIOD_MS;
+	//const TickType_t xConnectDelay = 5000 / portTICK_PERIOD_MS;
   /* Infinite loop */
-  for(;;)
-  {
-	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+  for(;;) {
+	  debugPrintln(&huart1, "AT");
+	  osDelay(5000);
 
-	  char line1[] = "AT+CWMODE=1\r\n";											//set wifi mode
-	  HAL_UART_Transmit(&huart1, (uint8_t*) line1, strlen(line1), 10);
+	  //debugPrintln(&huart1, "AT+RST");
+	  //osDelay(5000);
+
+	  debugPrintln(&huart1, "AT+CWMODE=1");
+	  osDelay(3000);
+
+	  debugPrintln(&huart1, "AT+CWJAP=\"iPhone\",\"0odpvgt2bf0od\"");
+	  osDelay(15000);
+
+	  debugPrintln(&huart1, "AT+CIPSTART=\"TCP\",\"d0b6cd176e6ed9.localhost.run\",80");
+	  osDelay(5000);
+
+	  float temp = (float)rand()/((float)RAND_MAX/50.0);
+	  float humid = (float)rand()/((float)RAND_MAX/100.0);
+
+	  int tempLen = snprintf(NULL, 0, "%f", temp);
+	  char* tempResult = (char*)malloc(tempLen + 1);
+	  snprintf(tempResult, tempLen + 1, "%f", temp);
+
+	  int humidLen = snprintf(NULL, 0, "%f", humid);
+	  char* humidResult = (char*)malloc(humidLen + 1);
+	  snprintf(humidResult, humidLen + 1, "%f", humid);
+
+	  const char* first = "GET /api/v2?temperature=";
+	  const char* second = "&humidity=";
+	  const char* third = " HTTP/1.1\r\nHost: d0b6cd176e6ed9.localhost.run\r\n\r\n";
+
+	  const int MAX_BUF = 512;
+	  char buffer[MAX_BUF];
+	  strcat(buffer, first);
+	  strcat(buffer, tempResult);
+	  strcat(buffer, second);
+	  strcat(buffer, humidResult);
+	  strcat(buffer, third);
+
+	  free(tempResult);
+	  free(humidResult);
+
+	  int num = strlen(buffer);
+	  char snum[6];
+	  itoa(num, snum, 10);
+
+	  debugPrint(&huart1, "AT+CIPSEND=");
+	  debugPrintln(&huart1, snum);
+	  osDelay(2500);
+
+	  debugPrint(&huart1, buffer);
+	  osDelay(10000);
+
+	  debugPrintln(&huart1, "AT+CIPCLOSE");
 	  osDelay(1000);
-
-	  char line2[] = "AT+CWJAP=\"KPNC12816\",\"VVWbKchF7R3J3wvN\"\r\n";			//connect to an AP(router)
-	  HAL_UART_Transmit(&huart1, (uint8_t*) line2, strlen(line2), 10);
-	  osDelay(xConnectDelay);
-
-	  char line3[] = "AT+CIPSTART=\"TCP\",\"82.170.159.85\",8081\r\n";			//target IP when sending data (hier maak TCP connectie)
-	  HAL_UART_Transmit(&huart1, (uint8_t*) line3, strlen(line3), 10);
-	  osDelay(1000);
-
-	  char line4[] = "AT+CIPSEND=18\r\n";										//hoeveel data verzenden
-	  HAL_UART_Transmit(&huart1, (uint8_t*) line4, strlen(line4), 10);
-	  osDelay(1000);
-
-	  char line5[] = "GET / HTTP/1.1\r\n\r\n";									//data daadwerkelijk verzenden
-	  HAL_UART_Transmit(&huart1, (uint8_t*) line5, strlen(line5), 10);
-	  osDelay(1000);
-
-	  char line6[] = "AT+CIPCLOSE\r\n";											//close TCP
-	  HAL_UART_Transmit(&huart1, (uint8_t*) line6, strlen(line6), 10);
-	  osDelay(1000);
-	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
-    osDelay(xDelay);
+	  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 
 
-
+	  //	  STM(tx) -> ESP(rx)
+	  //	  ESP(tx) -> Kabel(rx)
 
   }
+
+
+
+
+//  {
+//	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+//
+//	  char line1[] = "AT+CWMODE=1\r\n";											//set wifi mode
+//	  HAL_UART_Transmit(&huart1, (uint8_t*) line1, strlen(line1), 10);
+//	  osDelay(1000);
+//
+//	  char line2[] = "AT+CWJAP=\"KPNC12816\",\"VVWbKchF7R3J3wvN\"\r\n";			//connect to an AP(router)
+//	  HAL_UART_Transmit(&huart1, (uint8_t*) line2, strlen(line2), 10);
+//	  osDelay(xConnectDelay);
+//
+//	  char line3[] = "AT+CIPSTART=\"TCP\",\"82.170.159.85\",8081\r\n";			//target IP when sending data (hier maak TCP connectie)
+//	  HAL_UART_Transmit(&huart1, (uint8_t*) line3, strlen(line3), 10);
+//	  osDelay(1000);
+//
+//	  char line4[] = "AT+CIPSEND=18\r\n";										//hoeveel data verzenden
+//	  HAL_UART_Transmit(&huart1, (uint8_t*) line4, strlen(line4), 10);
+//	  osDelay(1000);
+//
+//	  char line5[] = "GET / HTTP/1.1\r\n\r\n";									//data daadwerkelijk verzenden (request)
+//	  HAL_UART_Transmit(&huart1, (uint8_t*) line5, strlen(line5), 10);
+//	  osDelay(1000);
+//
+//	  char line6[] = "AT+CIPCLOSE\r\n";											//close TCP
+//	  HAL_UART_Transmit(&huart1, (uint8_t*) line6, strlen(line6), 10);
+//	  osDelay(1000);
+//	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+//    osDelay(xDelay);
+//
+//																				//dan return response met statuscode to STM32
+//
+//
+//  }
   /* USER CODE END StartSendData */
 }
 
