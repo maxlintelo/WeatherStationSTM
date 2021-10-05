@@ -27,6 +27,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "pressure.h"
 
 /* USER CODE END Includes */
 
@@ -46,13 +47,14 @@
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c2;
 
 UART_HandleTypeDef huart1;
 
-/* Definitions for readSensor */
-osThreadId_t readSensorHandle;
-const osThreadAttr_t readSensor_attributes = {
-  .name = "readSensor",
+/* Definitions for readTemperature */
+osThreadId_t readTemperatureHandle;
+const osThreadAttr_t readTemperature_attributes = {
+  .name = "readTemperature",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
@@ -60,6 +62,13 @@ const osThreadAttr_t readSensor_attributes = {
 osThreadId_t sendDataHandle;
 const osThreadAttr_t sendData_attributes = {
   .name = "sendData",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for readPressure */
+osThreadId_t readPressureHandle;
+const osThreadAttr_t readPressure_attributes = {
+  .name = "readPressure",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
@@ -71,14 +80,15 @@ float float_finalHumid = 0.0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-void SystemClock_Config(void);
-static void MX_GPIO_Init(void);
-static void MX_I2C1_Init(void);
-static void MX_USART1_UART_Init(void);
-void ReadSensorTask(void *argument);
-void StartSendData(void *argument);
 
 /* USER CODE BEGIN PFP */
+
+void delay_ms(uint32_t period_ms);
+int8_t i2c_reg_write(uint8_t i2c_addr, uint8_t reg_addr, uint8_t *reg_data, uint16_t length);
+int8_t i2c_reg_read(uint8_t i2c_addr, uint8_t reg_addr, uint8_t *reg_data, uint16_t length);
+int8_t spi_reg_write(uint8_t cs, uint8_t reg_addr, uint8_t *reg_data, uint16_t length);
+int8_t spi_reg_read(uint8_t cs, uint8_t reg_addr, uint8_t *reg_data, uint16_t length);
+void print_rslt(const char api_name[], int8_t rslt);
 
 /* USER CODE END PFP */
 
@@ -117,6 +127,7 @@ int main(void)
   MX_GPIO_Init();
   MX_I2C1_Init();
   MX_USART1_UART_Init();
+  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 
   initSensor(&hi2c1);
@@ -143,11 +154,14 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of readSensor */
-  readSensorHandle = osThreadNew(ReadSensorTask, NULL, &readSensor_attributes);
+  /* creation of readTemperature */
+  readTemperatureHandle = osThreadNew(StartReadTemperature, NULL, &readTemperature_attributes);
 
   /* creation of sendData */
   sendDataHandle = osThreadNew(StartSendData, NULL, &sendData_attributes);
+
+  /* creation of readPressure */
+  readPressureHandle = osThreadNew(StartReadPressure, NULL, &readPressure_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -261,6 +275,52 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief I2C2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C2_Init(void)
+{
+
+  /* USER CODE BEGIN I2C2_Init 0 */
+
+  /* USER CODE END I2C2_Init 0 */
+
+  /* USER CODE BEGIN I2C2_Init 1 */
+
+  /* USER CODE END I2C2_Init 1 */
+  hi2c2.Instance = I2C2;
+  hi2c2.Init.Timing = 0x2000090E;
+  hi2c2.Init.OwnAddress1 = 0;
+  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c2.Init.OwnAddress2 = 0;
+  hi2c2.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c2, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c2, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C2_Init 2 */
+
+  /* USER CODE END I2C2_Init 2 */
+
+}
+
+/**
   * @brief USART1 Initialization Function
   * @param None
   * @retval None
@@ -333,14 +393,14 @@ void debugPrintln(UART_HandleTypeDef *huart, char _out[]){
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_ReadSensorTask */
+/* USER CODE BEGIN Header_StartReadTemperature */
 /**
-  * @brief  Function implementing the readSensor thread.
+  * @brief  Function implementing the readTemperature thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_ReadSensorTask */
-void ReadSensorTask(void *argument)
+/* USER CODE END Header_StartReadTemperature */
+void StartReadTemperature(void *argument)
 {
   /* USER CODE BEGIN 5 */
   const TickType_t xDelay = 2500 / portTICK_PERIOD_MS;
@@ -351,11 +411,6 @@ void ReadSensorTask(void *argument)
 	updateSensor(&float_finalTemp, &float_finalHumid, &hi2c1);
 	// Non-blocking delay
 	osDelay(xDelay);
-
-	// TODO Fix UART
-	// char *msg = "Hello Nucleo Fun!\n\r";
-	// HAL_UART_Transmit(&huart2, (uint8_t*)msg, 20, 0xFFFF);
-	// HAL_Delay(1000);
   }
   /* USER CODE END 5 */
 }
@@ -384,8 +439,13 @@ char* rep(char* input, char find, char replace) {
 void StartSendData(void *argument)
 {
   /* USER CODE BEGIN StartSendData */
+
 //	const TickType_t xDelay = 10000 / portTICK_PERIOD_MS;
 	//const TickType_t xConnectDelay = 5000 / portTICK_PERIOD_MS;
+
+  const TickType_t xDelay = 10000 / portTICK_PERIOD_MS;
+  const TickType_t xConnectDelay = 5000 / portTICK_PERIOD_MS;
+
   /* Infinite loop */
   for(;;) {
 	  debugPrintln(&huart1, "AT");
@@ -447,7 +507,6 @@ void StartSendData(void *argument)
 
 	  //	  STM(tx) -> ESP(rx)
 	  //	  ESP(tx) -> Kabel(rx)
-
   }
 
 
@@ -487,6 +546,24 @@ void StartSendData(void *argument)
 //
 //  }
   /* USER CODE END StartSendData */
+}
+
+/* USER CODE BEGIN Header_StartReadPressure */
+/**
+* @brief Function implementing the readPressure thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartReadPressure */
+void StartReadPressure(void *argument)
+{
+  /* USER CODE BEGIN StartReadPressure */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartReadPressure */
 }
 
 /**
