@@ -37,6 +37,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define BUF_MAX 128
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -381,6 +382,33 @@ void StartReadTemperature(void *argument)
 * @retval None
 */
 /* USER CODE END Header_StartSendData */
+
+char* _gcvt_new(double value, int ndigits, char* buf)
+{
+    char* p = buf;
+
+    sprintf(buf, "%-#.*g", ndigits, value);
+
+    /* It seems they expect us to return .XXXX instead of 0.XXXX  */
+    if (*p == '-')
+        p++;
+    if (*p == '0' && p[1] == '.')
+        memmove(p, p + 1, strlen(p + 1) + 1);
+
+    /* They want Xe-YY, not X.e-YY, and XXXX instead of XXXX.  */
+    p = strchr(buf, 'e');
+    if (!p)
+    {
+        p = buf + strlen(buf);
+        /* They don't want trailing zeroes.  */
+        while (p[-1] == '0' && p > buf + 2)
+            *--p = '\0';
+    }
+    if (p > buf && p[-1] == '.')
+        memmove(p - 1, p, strlen(p) + 1);
+    return buf;
+}
+
 void StartSendData(void *argument)
 {
   /* USER CODE BEGIN StartSendData */
@@ -402,36 +430,26 @@ void StartSendData(void *argument)
 	  debugPrintln(&huart1, "AT+CWJAP=\"iPhone\",\"0odpvgt2bf0od\"");
 	  osDelay(15000);
 
-	  debugPrintln(&huart1, "AT+CIPSTART=\"TCP\",\"d0b6cd176e6ed9.localhost.run\",80");
+	  debugPrintln(&huart1, "AT+CIPSTART=\"TCP\",\"81.207.176.52\",8081");
 	  osDelay(5000);
 
-	  float temp = (float)rand()/((float)RAND_MAX/50.0);
-	  float humid = (float)rand()/((float)RAND_MAX/100.0);
+	  	  rand();
+	      float bar = (float)rand() / ((float)RAND_MAX / 60.0);
+	      float humid = (float)rand() / ((float)RAND_MAX / 100.0);
+	      float temperature = (float)rand() / ((float)RAND_MAX / 50.0);
+	      char tempBuf[8];
+	      char humidBuf[8];
+	      char barBuf[8];
+	      _gcvt_new(temperature, 6, tempBuf);
+	      _gcvt_new(humid, 6, humidBuf);
+	      _gcvt_new(bar, 6, barBuf);
 
-	  int tempLen = snprintf(NULL, 0, "%f", temp);
-	  char* tempResult = (char*)malloc(tempLen + 1);
-	  snprintf(tempResult, tempLen + 1, "%f", temp);
+	      char hostBuf[21] = "81.207.176.52\r\n\r\n";
+	      char finalBuf[BUF_MAX];
+	      snprintf(finalBuf, BUF_MAX, "%s%s%s%s%s%s%s%s", "GET /api/v2/post?temperature=", tempBuf, "&humidity=", humidBuf, "&pressure=", barBuf, " HTTP/1.1\r\nHost: ", hostBuf);
 
-	  int humidLen = snprintf(NULL, 0, "%f", humid);
-	  char* humidResult = (char*)malloc(humidLen + 1);
-	  snprintf(humidResult, humidLen + 1, "%f", humid);
 
-	  const char* first = "GET /api/v2?temperature=";
-	  const char* second = "&humidity=";
-	  const char* third = " HTTP/1.1\r\nHost: d0b6cd176e6ed9.localhost.run\r\n\r\n";
-
-	  const int MAX_BUF = 512;
-	  char buffer[MAX_BUF];
-	  strcat(buffer, first);
-	  strcat(buffer, tempResult);
-	  strcat(buffer, second);
-	  strcat(buffer, humidResult);
-	  strcat(buffer, third);
-
-	  free(tempResult);
-	  free(humidResult);
-
-	  int num = strlen(buffer);
+	  int num = strlen(finalBuf);
 	  char snum[6];
 	  itoa(num, snum, 10);
 
@@ -439,7 +457,7 @@ void StartSendData(void *argument)
 	  debugPrintln(&huart1, snum);
 	  osDelay(2500);
 
-	  debugPrint(&huart1, buffer);
+	  debugPrint(&huart1, finalBuf);
 	  osDelay(10000);
 
 	  debugPrintln(&huart1, "AT+CIPCLOSE");
