@@ -461,11 +461,12 @@ void waitForOK()
 void StartSendData(void *argument)
 {
 	/* USER CODE BEGIN StartSendData */
-	const TickType_t oneSecondDelay = 10000 / portTICK_PERIOD_MS;
+	const TickType_t oneSecondDelay = 1000 / portTICK_PERIOD_MS;
 
 	/* Infinite loop */
 	for(;;) {
 		Ringbuf_Reset();
+		osDelay(oneSecondDelay);
 		
 		sendCommand("AT\r\n");
 		waitForOK();
