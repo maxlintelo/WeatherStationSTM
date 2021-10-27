@@ -391,15 +391,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void debugPrint(UART_HandleTypeDef *huart, char _out[]){
-	HAL_UART_Transmit(huart, (uint8_t *) _out, strlen(_out), 10);
-}
-
-void debugPrintln(UART_HandleTypeDef *huart, char _out[]){
-	HAL_UART_Transmit(huart, (uint8_t *) _out, strlen(_out), 10);
-	char newline[2] = "\r\n";
-	HAL_UART_Transmit(huart, (uint8_t *) newline, 2, 10);
-}
 
 /* USER CODE END 4 */
 
@@ -435,138 +426,110 @@ void StartReadTemperature(void *argument)
 
 
 /* USER CODE END Header_StartSendData */
-//#define DELAY_ONLY
-#define DELAY_MS 2500
-void waitForOK(){
-	osDelay(DELAY_MS);
-#ifndef DELAY_ONLY
-	for (int i = 0; i< 10000; i++){
-		if(isOK){
-			isOK = 0;
-			return;
-		}
-		osDelay(100);
-	}
-	isOK = 0;
-#endif
+
+void sendCommand(char _out[]){
+	HAL_UART_Transmit(&huart1, (uint8_t *) _out, strlen(_out), 10);
 }
 
+/* Wait for 1 minute to find OK response.
+ */
+void waitForOK()
+{
+	/*
+	 * 600 * 100 MS = 1 minute.
+	 */
+	for (int i = 0; i < 600; i++) {
+		/* isOK becomes one if OK is found in serial feedback.
+		 * (HAL_UARTEx_RxEventCallback) handles isOK.
+		 * If OK is found, reset it, wait one second, and return.
+		 */
+		if(isOK) {
+			isOK = 0;
+			osDelay(1000 / portTICK_PERIOD_MS); // 1 Second
+			return;
+		} else {
+			osDelay(100 / portTICK_PERIOD_MS); // 100 MS
+		}
+	}
+	/* This code will only be reached if no OK is detected.
+	 * Only after 600 * 100 MS = 1 minute of checking.
+	 */
+	isOK = 0;
+	return;
+}
 
 void StartSendData(void *argument)
 {
 	/* USER CODE BEGIN StartSendData */
-
-	//const TickType_t xDelay = 10000 / portTICK_PERIOD_MS;
-	//const TickType_t xConnectDelay = 5000 / portTICK_PERIOD_MS;
+	const TickType_t oneSecondDelay = 10000 / portTICK_PERIOD_MS;
 
 	/* Infinite loop */
 	for(;;) {
-		//	  debugPrintln(&huart1, "AT+RST");
-		//	  osDelay(5000);
-		//	  isOK = 0;
-
-		debugPrintln(&huart1, "AT");
-		//  osDelay(5000);
+		Ringbuf_Reset();
+		
+		sendCommand("AT\r\n");
 		waitForOK();
 
-		// HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-
-		debugPrintln(&huart1, "AT+CWMODE=1");
+		/*
+		 * Set mode to AP client
+		 */
+		sendCommand("AT+CWMODE=1\r\n");
 		waitForOK();
 
-		debugPrintln(&huart1, "AT+CWJAP=\"LAPTOP-VG095PM22913\",\"3987<Cs0\"");
+		/*
+		 * Connect to AP
+		 */
+		sendCommand("AT+CWJAP=\"LAPTOP-VG095PM22913\",\"3987<Cs0\"\r\n");
 		waitForOK();
 
-		debugPrintln(&huart1, "AT+CIPSTART=\"TCP\",\"81.207.176.52\",8081");
+		/*
+		 * Make TCP connection
+		 */
+		sendCommand("AT+CIPSTART=\"TCP\",\"81.207.176.52\",8081\r\n");
 		waitForOK();
 
-		char requestBuffer[128];
+		/*
+		 * TODO Get real values from sensor
+		 */
 		int mockTemperature = (rand() % (50 + 1 - (-20))) + (-20);
 		int mockHumidity = (rand() % (100 + 1 - 0)) + 0;
 		int mockPressure = (rand() % (1100 + 1 - 900)) + 900;
+
+		/*
+		 * Concat the values in the request string
+		 */
+		char requestBuffer[128];
 		snprintf(requestBuffer, 128, "GET /api/v3/post?temperature=%d&humidity=%d&pressure=%d HTTP/1.1\r\nHost: 81.207.176.52\r\n\r\n", mockTemperature, mockHumidity, mockPressure);
-		int k;
+		
+		/*
+		 * Get the length of the request
+		 */
 		int num = strlen(requestBuffer);
 		char snum[6];
 		itoa(num, snum, 10);
-		debugPrint(&huart1, "AT+CIPSEND=");
-		debugPrintln(&huart1, snum);
+
+		/*
+		 * Send the length of the request
+		 */
+		sendCommand("AT+CIPSEND=");
+		sendCommand(snum);
+		sendCommand("\r\n");
 		osDelay(2500);
-		debugPrint(&huart1, requestBuffer);
+
+		/*
+		 * Get the request
+		 */
+		sendCommand(requestBuffer);
 		osDelay(5000);
 
-//		rand();
-//		float bar = (float)rand() / ((float)RAND_MAX / 60.0);
-//		float humid = (float)rand() / ((float)RAND_MAX / 100.0);
-//		float temperature = (float)rand() / ((float)RAND_MAX / 50.0);
-//		char tempBuf[8];
-//		char humidBuf[8];
-//		char barBuf[8];
-//		_gcvt_new(temperature, 6, tempBuf);
-//		_gcvt_new(humid, 6, humidBuf);
-//		_gcvt_new(bar, 6, barBuf);
-//
-//		char hostBuf[21] = "81.207.176.52\r\n\r\n";
-//		char finalBuf[BUF_MAX];
-//		snprintf(finalBuf, BUF_MAX, "%s%s%s%s%s%s%s%s", "GET /api/v3/post?temperature=", tempBuf, "&humidity=", humidBuf, "&pressure=", barBuf, " HTTP/1.1\r\nHost: ", hostBuf);
-//
-//
-//		int num = strlen(finalBuf);
-//		char snum[6];
-//		itoa(num, snum, 10);
-//
-//		debugPrint(&huart1, "AT+CIPSEND=");
-//		debugPrintln(&huart1, snum);
-//		waitForOK();
-//		osDelay(2500);
-//
-//		debugPrint(&huart1, finalBuf);
-//		waitForOK();
-
-		debugPrintln(&huart1, "AT+CIPCLOSE");
+		/*
+		 * Close the TCP connection
+		 */
+		sendCommand("AT+CIPCLOSE\r\n");
 		osDelay(1000);
-		isOK = 0;
+
 		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-		Ringbuf_Reset();
-
 	}
-
-
-
-
-	//  {
-	//	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
-	//
-	//	  char line1[] = "AT+CWMODE=1\r\n";											//set wifi mode
-	//	  HAL_UART_Transmit(&huart1, (uint8_t*) line1, strlen(line1), 10);
-	//	  osDelay(1000);
-	//
-	//	  char line2[] = "AT+CWJAP=\"KPNC12816\",\"VVWbKchF7R3J3wvN\"\r\n";			//connect to an AP(router)
-	//	  HAL_UART_Transmit(&huart1, (uint8_t*) line2, strlen(line2), 10);
-	//	  osDelay(xConnectDelay);
-	//
-	//	  char line3[] = "AT+CIPSTART=\"TCP\",\"82.170.159.85\",8081\r\n";			//target IP when sending data (hier maak TCP connectie)
-	//	  HAL_UART_Transmit(&huart1, (uint8_t*) line3, strlen(line3), 10);
-	//	  osDelay(1000);
-	//
-	//	  char line4[] = "AT+CIPSEND=18\r\n";										//hoeveel data verzenden
-	//	  HAL_UART_Transmit(&huart1, (uint8_t*) line4, strlen(line4), 10);
-	//	  osDelay(1000);
-	//
-	//	  char line5[] = "GET / HTTP/1.1\r\n\r\n";									//data daadwerkelijk verzenden (request)
-	//	  HAL_UART_Transmit(&huart1, (uint8_t*) line5, strlen(line5), 10);
-	//	  osDelay(1000);
-	//
-	//	  char line6[] = "AT+CIPCLOSE\r\n";											//close TCP
-	//	  HAL_UART_Transmit(&huart1, (uint8_t*) line6, strlen(line6), 10);
-	//	  osDelay(1000);
-	//	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
-	//    osDelay(xDelay);
-	//
-	//																				//dan return response met statuscode to STM32
-	//
-	//
-	//  }
 	/* USER CODE END StartSendData */
 }
 
