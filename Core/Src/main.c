@@ -433,12 +433,12 @@ void sendCommand(char _out[]){
 
 /* Wait for 1 minute to find OK response.
  */
-void waitForOK()
+int waitForOK(int iterations)
 {
 	/*
 	 * 600 * 100 MS = 1 minute.
 	 */
-	for (int i = 0; i < 600; i++) {
+	for (int i = 0; i < iterations; i++) {
 		/* isOK becomes one if OK is found in serial feedback.
 		 * (HAL_UARTEx_RxEventCallback) handles isOK.
 		 * If OK is found, reset it, wait one second, and return.
@@ -446,7 +446,7 @@ void waitForOK()
 		if(isOK) {
 			isOK = 0;
 			osDelay(1000 / portTICK_PERIOD_MS); // 1 Second
-			return;
+			return 1;
 		} else {
 			osDelay(100 / portTICK_PERIOD_MS); // 100 MS
 		}
@@ -455,39 +455,50 @@ void waitForOK()
 	 * Only after 600 * 100 MS = 1 minute of checking.
 	 */
 	isOK = 0;
-	return;
+	return 0;
 }
 
 void StartSendData(void *argument)
 {
 	/* USER CODE BEGIN StartSendData */
-	const TickType_t oneSecondDelay = 1000 / portTICK_PERIOD_MS;
-
 	/* Infinite loop */
 	for(;;) {
 		Ringbuf_Reset();
-		osDelay(oneSecondDelay);
+		osDelay(1000 / portTICK_PERIOD_MS);
 		
-		sendCommand("AT\r\n");
-		waitForOK();
+		/*
+		 * Test send AT
+		 */
+		/*
+		at: sendCommand("AT\r\n");
+		if (waitForOK(300)) {
+			goto at;
+		}
+		*/
 
 		/*
 		 * Set mode to AP client
 		 */
-		sendCommand("AT+CWMODE=1\r\n");
-		waitForOK();
+		cwmode: sendCommand("AT+CWMODE=1\r\n");
+		if (waitForOK(300)) {
+			goto cwmode;
+		}
 
 		/*
 		 * Connect to AP
 		 */
-		sendCommand("AT+CWJAP=\"LAPTOP-VG095PM22913\",\"3987<Cs0\"\r\n");
-		waitForOK();
+		cwjap: sendCommand("AT+CWJAP=\"LAPTOP-VG095PM22913\",\"3987<Cs0\"\r\n");
+		if (waitForOK(300)) {
+			goto cwjap;
+		}
 
 		/*
 		 * Make TCP connection
 		 */
 		sendCommand("AT+CIPSTART=\"TCP\",\"81.207.176.52\",8081\r\n");
-		waitForOK();
+		if (waitForOK(300)) {
+			goto cwjap;
+		}
 
 		/*
 		 * TODO Get real values from sensor
@@ -527,9 +538,8 @@ void StartSendData(void *argument)
 		 * Close the TCP connection
 		 */
 		sendCommand("AT+CIPCLOSE\r\n");
-		osDelay(1000);
-
 		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+		osDelay(1000 / portTICK_PERIOD_MS);
 	}
 	/* USER CODE END StartSendData */
 }
