@@ -19,6 +19,8 @@ void Ringbuf_Init (void);
  * */
 void Ringbuf_Reset (void);
 
+void Ringbuf_Reset_DMA(void);
+
 
 uint8_t checkString (char *str, char *buffertolookinto);
 

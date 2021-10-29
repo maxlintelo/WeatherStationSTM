@@ -50,7 +50,7 @@ void Ringbuf_Init (void)
 }
 
 /* Resets the Ring buffer */
-void Ringbuf_Reset (void)
+void Ringbuf_Reset_Buf (void)
 {
 	memset(MainBuf,'\0', MainBuf_SIZE);
 	memset(RxBuf, '\0', RxBuf_SIZE);
@@ -59,6 +59,11 @@ void Ringbuf_Reset (void)
 	oldPos = 0;
 	newPos = 0;
 	isOK = 0;
+}
+void Ringbuf_Reset_DMA(void)
+{
+	HAL_UARTEx_ReceiveToIdle_DMA(&UART, RxBuf, RxBuf_SIZE);
+    __HAL_DMA_DISABLE_IT(&DMA, DMA_IT_HT);
 }
 
 /* checks, if the entered string is present in the given buffer ?

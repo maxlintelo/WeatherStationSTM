@@ -78,7 +78,6 @@ const osThreadAttr_t readPressure_attributes = {
 
 float float_finalTemp = 0.0;
 float float_finalHumid = 0.0;
-float temperature, huminidity;
 int32_t pressure;
 int isOK = 0;
 
@@ -114,8 +113,19 @@ char buffer[100];
 
 /* USER CODE END Header_StartSendData */
 
-void sendCommand(char _out[]){
-    HAL_UART_Transmit(&huart1, (uint8_t *) _out, strlen(_out), 10);
+void sendCommand(char out[]){
+    HAL_UART_Transmit(&huart1, (uint8_t *) out, strlen(out), 10);
+}
+void sendAndWait(char out[], int timeout, int do_retry) {
+  	Ringbuf_Reset_Buf();
+    Ringbuf_Reset_DMA();
+
+		retry: sendCommand(timeout);
+		if (!waitForOK(300)) {
+			Ringbuf_Reset();
+			osDelay(1000 / portTICK_PERIOD_MS);
+      if (do_retry) goto retry;
+		}
 }
 
 /* Wait for 1 minute to find OK response.
@@ -125,8 +135,8 @@ int waitForOK(int iterations)
     /*
      * 600 * 100 MS = 1 minute.
      */
-   isOK = 0;
-	for (int i = 0; i < iterations; i++) {
+    isOK = 0;
+	  for (int i = 0; i < iterations; i++) {
         /* isOK becomes one if OK is found in serial feedback.
          * (HAL_UARTEx_RxEventCallback) handles isOK.
          * If OK is found, reset it, wait one second, and return.
@@ -135,14 +145,12 @@ int waitForOK(int iterations)
             isOK = 0;
             osDelay(1000 / portTICK_PERIOD_MS); // 1 Second
             return 1;
-        } else {
-            osDelay(100 / portTICK_PERIOD_MS); // 100 MS
         }
+        osDelay(100 / portTICK_PERIOD_MS); // 100 MS
     }
     /* This code will only be reached if no OK is detected.
      * Only after 600 * 100 MS = 1 minute of checking.
      */
-    isOK = 0;
     return 0;
 }
 
@@ -494,52 +502,14 @@ void StartSendData(void *argument)
   /* USER CODE BEGIN StartSendData */
 	/* Infinite loop */
 	for(;;) {
-		Ringbuf_Init();
-		osDelay(1000 / portTICK_PERIOD_MS);
+		// Set mode to AP client
+    sendAndWait("AT+CWMODE=1\r\n", 300, 1);
 		
-		/*
-		 * Test send AT
-		 */
-		/*
-		at: sendCommand("AT\r\n");
-		if (waitForOK(300)) {
-			goto at;
-		}
-		*/
+		// Connect to AP
+    sendAndWait("AT+CWJAP=\"LAPTOP-VG095PM22913\",\"3987<Cs0\"\r\n", 300, 1);
 
-		/*
-		 * Set mode to AP client
-		 */
-		Ringbuf_Init();
-		cwmode: sendCommand("AT+CWMODE=1\r\n");
-		if (!waitForOK(300)) {
-			Ringbuf_Reset();
-			osDelay(1000 / portTICK_PERIOD_MS);
-			goto cwmode;
-
-		}
-		Ringbuf_Init();
-		/*
-		 * Connect to AP
-		 */
-		cwjap: sendCommand("AT+CWJAP=\"LAPTOP-VG095PM22913\",\"3987<Cs0\"\r\n");
-		if (!waitForOK(300)) {
-			Ringbuf_Reset();
-			osDelay(1000 / portTICK_PERIOD_MS);
-			goto cwjap;
-		}
-		Ringbuf_Init();
-
-		/*
-		 * Make TCP connection
-		 */
-		sendCommand("AT+CIPSTART=\"TCP\",\"81.207.176.52\",8081\r\n");
-		if (!waitForOK(300)) {
-			Ringbuf_Reset();
-			osDelay(1000 / portTICK_PERIOD_MS);
-			goto cwjap;
-		}
-		Ringbuf_Init();
+		//Make TCP connection
+    sendAndWait("AT+CIPSTART=\"TCP\",\"81.207.176.52\",8081\r\n", 300, 1);
 
 		/*
 		 * TODO Get real values from sensor
@@ -575,10 +545,10 @@ void StartSendData(void *argument)
 		sendCommand(requestBuffer);
 		osDelay(5000);
 
-		/*
-		 * Close the TCP connection
-		 */
-		sendCommand("AT+CIPCLOSE\r\n");
+		// Close the TCP connection
+    sendAndWait("AT+CIPCLOSE\r\n", 300, 0);
+
+    // Toggle LED for status and wait
 		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 		osDelay(1000 / portTICK_PERIOD_MS);
 	}
