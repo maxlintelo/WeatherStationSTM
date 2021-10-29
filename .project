@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>WeatherStationSTM</name>
+	<name>WeatherStation</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -29,16 +29,4 @@
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
 	</natures>
-	<linkedResources>
-		<link>
-			<name>Core/Inc/uartRingBufDMA.h</name>
-			<type>1</type>
-			<location>C:/Users/busra/OneDrive/Documenten/Development/WeatherStationSTM/Core/Inc/uartRingBufDMA.h</location>
-		</link>
-		<link>
-			<name>Core/Src/uartRingBufDMA.c</name>
-			<type>1</type>
-			<location>C:/Users/busra/OneDrive/Documenten/Development/WeatherStationSTM/Core/Src/uartRingBufDMA.c</location>
-		</link>
-	</linkedResources>
 </projectDescription>

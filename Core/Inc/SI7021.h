@@ -5,11 +5,10 @@
  *      Author: Max
  */
 
-#ifndef INC_SENSOR_H_
-#define INC_SENSOR_H_
+#ifndef INC_SI7021_H_
+#define INC_SI7021_H_
 
 #include "stm32f0xx_hal.h"
-
 /*
  * Get a reference to the I2C handle from main
  */
@@ -40,7 +39,7 @@ extern uint8_t uint8_humidIncomingBytes[3];
  */
 extern float float_temp, float_humid;
 
-void updateSensor(float*, float*, I2C_HandleTypeDef*);
-void initSensor(I2C_HandleTypeDef*);
+void SI7021_Measure(float*, float*, I2C_HandleTypeDef*);
+void SI7021_Init(I2C_HandleTypeDef*);
 
-#endif /* INC_SENSOR_H_ */
+#endif /* INC_SI7021_H_ */

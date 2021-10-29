@@ -7,7 +7,7 @@
 
 
 #include "stm32f0xx_hal.h"
-#include "uartRingBufDMA.h"
+#include "ESP8266.h"
 #include "string.h"
 
 extern UART_HandleTypeDef huart1;
@@ -167,12 +167,6 @@ again:
 		if (Tail==MainBuf_SIZE) Tail = 0;
 		if (so_far == len) return 1;
 	}
-
-//	if (so_far != len)
-//	{
-//		so_far = 0;
-//		goto again;
-//	}
 
 	HAL_Delay (100);
 
@@ -391,10 +385,3 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 		}
 	}
 }
-
-
-
-
-
-
-
