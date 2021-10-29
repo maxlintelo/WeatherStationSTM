@@ -17,7 +17,7 @@ void Ringbuf_Init (void);
 /* Reset the ring buffer
  * Resets the Head and Tail, also the buffers
  * */
-void Ringbuf_Reset (void);
+void Ringbuf_Reset_Buf (void);
 
 void Ringbuf_Reset_DMA(void);
 
