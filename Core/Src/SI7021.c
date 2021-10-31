@@ -1,4 +1,5 @@
 #include "SI7021.h"
+#include "cmsis_os.h"
 
 /*
  * In documentation, the 7-bit slave address was 0b1000000,
@@ -43,7 +44,7 @@ void SI7021_Measure(float* pTemp, float* pHumid, I2C_HandleTypeDef* hi2c) {
 	// Calculation as shown in documentation
 	*pTemp = (-46.85 + (175.72*(float_temp/65536)));
 	// Delay
-	HAL_Delay(50);
+	osDelay(30);
 
 	// Send 0xE5 to 0x80 (Measure Humidity CMD)
 	HAL_I2C_Master_Transmit(hi2c, SLAVE_ADDRESS, &uint8_commands[2] ,1, 100);
@@ -54,12 +55,12 @@ void SI7021_Measure(float* pTemp, float* pHumid, I2C_HandleTypeDef* hi2c) {
 	// Calculation as shown in documentation
 	*pHumid = (-6+(125*(float_humid/65536)));
 	// Delay
-	HAL_Delay(50);
+	osDelay(30);
 }
 
 void SI7021_Init(I2C_HandleTypeDef* hi2c) {
 	// Send 0xFE to 0x80 (Reset)
 	HAL_I2C_Master_Transmit(hi2c, SLAVE_ADDRESS, &uint8_commands[0], 1, 100);
 	// Wait for transmission
-	HAL_Delay(40);
+	//HAL_Delay(40);
 }

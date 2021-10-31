@@ -40,8 +40,10 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define MEASURE_BMP280
 
+//#define MEASURE_BMP280
+//#define MEASURE_SI7021
+//#define SEND_ESP8266
 
 /* USER CODE END PD */
 
@@ -468,6 +470,7 @@ void StartDefaultTask(void *argument)
 #ifdef MEASURE_BMP280
 	  bmp_pressure_int /= 100;
 #endif
+#ifdef SEND_ESP8266
 	  // Set mode to AP client
 	  sendAndWait("ATE1\r\n", 300, 0);
 
@@ -478,7 +481,7 @@ void StartDefaultTask(void *argument)
 
 	  //Make TCP connection
 	  sendAndWait("AT+CIPSTART=\"TCP\",\"81.207.176.52\",8081\r\n", 300, 1);
-
+#endif
 	  /*
 	   * Concat the values in the request string
 	   */
@@ -491,7 +494,7 @@ void StartDefaultTask(void *argument)
 	  int num = strlen(requestBuffer);
 	  char snum[6];
 	  itoa(num, snum, 10);
-
+#ifdef SEND_ESP8266
 	  /*
 	   * Send the length of the request
 	   */
@@ -509,7 +512,7 @@ void StartDefaultTask(void *argument)
 	  // Close the TCP connection
 	  sendCommand("\r\n");
 	  sendAndWait("AT+CIPCLOSE\r\n", 100, 0);
-
+#endif
 	  // Toggle LED for status and wait
 	  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
 	  osDelay(1500 / portTICK_PERIOD_MS);
