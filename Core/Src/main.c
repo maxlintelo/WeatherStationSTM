@@ -41,9 +41,9 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-//#define MEASURE_BMP280
+ #define MEASURE_BMP280
 //#define MEASURE_SI7021
-//#define SEND_ESP8266
+#define SEND_ESP8266
 
 /* USER CODE END PD */
 
@@ -63,7 +63,7 @@ DMA_HandleTypeDef hdma_usart1_rx;
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
-  .stack_size = 128 * 4,
+  .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
@@ -91,6 +91,7 @@ void StartDefaultTask(void *argument);
 
 int waitForOK(int iterations)
 {
+	iterations /= 10;
     // 600 * 100 MS = 1 minute.
     isOK = 0;
       for (int i = 0; i < iterations; i++) {
@@ -103,7 +104,7 @@ int waitForOK(int iterations)
             osDelay(1000 / portTICK_PERIOD_MS); // 1 Second
             return 1;
         }
-        osDelay(100 / portTICK_PERIOD_MS); // 100 MS
+        osDelay(10 / portTICK_PERIOD_MS); // 100 MS
     }
     return 0;
 }
@@ -472,15 +473,15 @@ void StartDefaultTask(void *argument)
 #endif
 #ifdef SEND_ESP8266
 	  // Set mode to AP client
-	  sendAndWait("ATE1\r\n", 300, 0);
+	  sendAndWait("ATE1\r\n", 1000, 0);
 
-	  sendAndWait("AT+CWMODE=1\r\n", 300, 1);
+	  sendAndWait("AT+CWMODE=1\r\n", 5000, 1);
 
 	  // Connect to AP
-	  sendAndWait("AT+CWJAP=\"LAPTOP-VG095PM22913\",\"3987<Cs0\"\r\n", 300, 1);
+	  sendAndWait("AT+CWJAP=\"LAPTOP-VG095PM22913\",\"3987<Cs0\"\r\n", 15000, 1);
 
 	  //Make TCP connection
-	  sendAndWait("AT+CIPSTART=\"TCP\",\"81.207.176.52\",8081\r\n", 300, 1);
+	  sendAndWait("AT+CIPSTART=\"TCP\",\"81.207.176.52\",8081\r\n", 5000, 1);
 #endif
 	  /*
 	   * Concat the values in the request string
@@ -506,12 +507,12 @@ void StartDefaultTask(void *argument)
 	  /*
 	   * Send the request
 	   */
-	  sendAndWait(requestBuffer, 300, 0);
+	  sendAndWait(requestBuffer, 5000, 0);
 	  osDelay(5000);
 
 	  // Close the TCP connection
-	  sendCommand("\r\n");
-	  sendAndWait("AT+CIPCLOSE\r\n", 100, 0);
+	 //  sendCommand("\r\n");
+	  sendAndWait("AT+CIPCLOSE\r\n", 1000, 0);
 #endif
 	  // Toggle LED for status and wait
 	  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
